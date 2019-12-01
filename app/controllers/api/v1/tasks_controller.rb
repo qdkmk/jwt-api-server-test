@@ -6,21 +6,27 @@ class Api::V1::TasksController < ApplicationController
   before_action :authenticate_user
   before_action :set_task, only: %i[show update destroy]
   def index
-    json_response(Task.all)
+    @tasks = current_user.tasks
+    json_response(@tasks)
   end
 
   def show
-    json_response(@tasks)
+    if @task.user != current_user
+      response_unauthorized
+    else
+      json_response(@task)
+    end
   end
 
   def create
     @task = Task.new(task_params)
-    if @task.title.blank?
+    if @task.title.blank? || @task.description.blank?
       response_bad_request
     else
-      if Task.exists?(description: @task.description)
+      if Task.exists?(description: @task.description, user: current_user)
         response_conflict(:task)
       else
+        @task.user = current_user
         if @task.save!
           response_success(:task, :create)
         else
@@ -33,27 +39,23 @@ class Api::V1::TasksController < ApplicationController
   def new; end
 
   def edit
-    @task = target_task params[:id]
   end
 
   def update
     @task.update(task_params)
-    head :no_content
+    response_success(:task, :update)
   end
 
   def destroy
     @task.destroy
-    head :no_content
+    response_success(:task, :destroy)
+    # head :no_content
   end
 
   private
 
   def json_response(object, status = :ok)
     render json: object, status: status
-  end
-
-  def target_task(task_id)
-    current_user.tasks.where(id: task_id).take
   end
 
   def task_params
